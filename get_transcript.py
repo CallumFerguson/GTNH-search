@@ -47,8 +47,18 @@ def get_transcript(video_id):
 
 
 if __name__ == "__main__":
+    # GTNH S02E25: what the endgame actually plays like
     # https://www.youtube.com/watch?v=5qDfpWolFyg
-    video_id = "5qDfpWolFyg"
+    # video_id = "5qDfpWolFyg"
+
+    # GTNH S02E10: assembly line automation
+    # https://www.youtube.com/watch?v=N_0ay7YLcdI
+    video_id = "N_0ay7YLcdI"
+
+    # GregTech New Horizons S3 - 96 - Automated Titanium
+    # https://www.youtube.com/watch?v=UpR4vGNkFhY
+    # video_id = "UpR4vGNkFhY"
+
     fetched_transcript = get_transcript(video_id)
 
     # Print each snippet from the transcript.
@@ -56,3 +66,7 @@ if __name__ == "__main__":
         print(snippet["text"])
         break
     print(f"Total snippets: {len(fetched_transcript)}")
+
+    # with open("output.txt", "w") as file:
+    #     for snippet in fetched_transcript:
+    #         file.write(snippet["text"] + "\n")
