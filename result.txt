@@ -1,0 +1,12 @@
+[
+  "In GTNH's Luv tier, building an assembly line involves crafting complex multiblock components that require auxiliary systems like extra storage and crafting co-processors to manage the large amount of materials.",
+  "To optimize the crafting process, you can adjust patterns to move stacks of items (e.g., 64 dusts at once) and upgrade furnace coils, reducing the load on the processor managing material transportation.",
+  "When crafting thousands of SMD components, small assemblers become a bottleneck; using a multiblock Precision Assembler in normal mode—with lower tier imprecise casings and a 16-amp energy hatch—can double the speed of production compared to using multiple IV assemblers.",
+  "The assembly line multiblock is highly customizable: its length can be adjusted to add more input slots, and it can be rotated vertically using a wrench to conserve space.",
+  "An AE2 network is employed for automation, where dedicated interfaces drop items that are moved by storage buses; careful priority sorting on these buses ensures items are directed to the correct input slots.",
+  "Before the assembly line can start, building instructions for each Luv component must be obtained by scanning the lower tier of the desired part with an EV scanner, a process that takes about 15 minutes per component.",
+  "To prevent overflow issues where excess items go to wrong inputs, a blocking card can be added to the assembly line network, enabling blocking mode on the interface with a pattern.",
+  "Some assembly recipes have too many ingredients for a standard pattern terminal, so upgrading to a fluid processing pattern terminal (with 32 input slots) is necessary to handle complex recipes.",
+  "For rocket plate assembly, molds are used to rename parts before they enter the assembly line; this prevents similar items from merging when split across different buses, ensuring the correct processing of complex recipes.",
+  "The video also introduces a multi-block or drilling plant—a large-scale miner that, paired with an electric prospector for resource location and pollution monitoring, can extract minerals layer by layer while controlling output using adjustable drilling fluid."
+]
