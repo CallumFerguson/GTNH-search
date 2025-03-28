@@ -31,7 +31,7 @@ const transcript = `
 CREATE TABLE IF NOT EXISTS transcript (
   id SERIAL PRIMARY KEY,
   video_id INTEGER NOT NULL UNIQUE REFERENCES video(id),
-  transcript TEXT
+  transcript JSONB
 );
 `;
 
