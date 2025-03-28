@@ -27,30 +27,48 @@ CREATE TABLE IF NOT EXISTS video (
 );
 `;
 
+// the transcript JSONB is the unedited transcript in the form:
+/*
+[
+  {
+    text: 'example text',
+    start: 0.16,
+    duration: 4.719
+  },
+  {
+    text: 'example text',
+    start: 5.72,
+    duration: 3.526
+  },
+  ...
+]
+*/
 const transcript = `
 CREATE TABLE IF NOT EXISTS transcript (
   id SERIAL PRIMARY KEY,
-  video_id INTEGER NOT NULL UNIQUE REFERENCES video(id),
-  transcript JSONB
+  video_id INTEGER NOT NULL REFERENCES video(id),
+  raw_transcript JSONB
 );
 `;
 
+// transcript chunks are useful bits of information that can be embedded and searched in a vector database. The chunks can be things like facts, tips and tricks, etc.
+// chunks are extracted from the transcript by an LLM
 const transcript_chunk = `
 CREATE TABLE IF NOT EXISTS transcript_chunk (
   id SERIAL PRIMARY KEY,
   transcript_id INTEGER NOT NULL REFERENCES transcript(id),
-  chunk_index INTEGER NOT NULL,
-  chunk_text TEXT,
-  embedding JSONB
+  chunk_text TEXT
 );
 `;
 
+// most of the time each transcript_chunk will have just one chunk_embedding, but there could be multiple if multiple different embedding models were tested
 const chunk_embedding = `
 CREATE TABLE IF NOT EXISTS chunk_embedding (
   id SERIAL PRIMARY KEY,
   chunk_id INTEGER NOT NULL REFERENCES transcript_chunk(id),
-  chunk_text TEXT,
-  embedding_model VARCHAR(255)
+  embedding_source VARCHAR(255),
+  embedding_model VARCHAR(255),
+  embedding_vector vector(1536)
 );
 `;
 

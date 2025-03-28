@@ -1,7 +1,7 @@
 import pgPromise from 'pg-promise';
 
 const pgp = pgPromise();
-const db = pgp(process.env.DATABASE_URL || 'postgres://postgres:password@localhost:5432/postgres');
+const db = pgp(process.env.DATABASE_URL);
 
 const allowFetch = false;
 
@@ -47,7 +47,7 @@ function validateTranscriptFormat(data) {
 }
 
 async function main() {
-    const videoId = 'ojyN4kTeU_o';
+    const videoId = 'N_0ay7YLcdI';
 
     // Check if the video exists in the database.
     const videoRecord = await db.oneOrNone('SELECT id FROM video WHERE video_id = $1', [videoId]);
@@ -58,36 +58,35 @@ async function main() {
 
     // Check if a transcript already exists for this video.
     let transcriptRecord = await db.oneOrNone(
-        'SELECT id, transcript FROM transcript WHERE video_id = $1',
+        'SELECT id, raw_transcript FROM transcript WHERE video_id = $1',
         [videoRecord.id]
     );
 
     if (!transcriptRecord) {
         if (!allowFetch) {
-            console.log('Transcript not found in database. but allowFetch is false');
+            console.log('Transcript not found in database, but allowFetch is false');
             process.exit(1);
         }
         console.log('Transcript not found in database. Fetching transcript...');
-        const transcript = await getTranscript(videoId);
-        if (!validateTranscriptFormat(transcript)) {
+        const raw_transcript = await getTranscript(videoId);
+        if (!validateTranscriptFormat(raw_transcript)) {
             console.error("Transcript format is invalid.");
             process.exit(1);
         }
         // Insert the new transcript into the database.
         await db.none(
-            'INSERT INTO transcript (video_id, transcript) VALUES ($1, $2:json)',
-            [videoRecord.id, transcript]
+            'INSERT INTO transcript (video_id, raw_transcript) VALUES ($1, $2:json)',
+            [videoRecord.id, raw_transcript]
         );
-        transcriptRecord = { transcript };
+        transcriptRecord = { raw_transcript };
         console.log('Transcript fetched and stored in the database.');
     } else {
         console.log('Transcript already exists in the database.');
     }
 
     // Log transcript details.
-    const transcriptData = transcriptRecord.transcript;
-    console.log("Transcript segment count:", transcriptData.length);
-    console.log("First segment:", transcriptData[0]);
+    console.log("Transcript segment count:", transcriptRecord.raw_transcript.length);
+    console.log("First segment:", transcriptRecord.raw_transcript[0]);
 
     pgp.end();
 }
