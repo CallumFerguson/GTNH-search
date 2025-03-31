@@ -5,7 +5,7 @@ import pgPromise from "pg-promise";
 
 dotenv.config();
 
-const allowFetch = true;
+const allowFetch = false;
 
 // Define the video id to process
 const videoId = 'N_0ay7YLcdI';
@@ -18,6 +18,20 @@ const db = pgp(process.env.DATABASE_URL);
 const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
+
+async function printChunks(transcriptRecord) {
+    const chunks = await db.any(
+        "SELECT chunk_text, line_number FROM transcript_chunk WHERE transcript_id = $1",
+        [transcriptRecord.id]
+    );
+    for (const chunk of chunks) {
+        console.log("chunk:")
+        console.log(chunk.chunk_text);
+        const start = transcriptRecord.raw_transcript[chunk.line_number].start;
+        console.log(`https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(start)}\n`);
+    }
+
+}
 
 async function main() {
     // Check if the video exists in the database
@@ -52,8 +66,7 @@ async function main() {
     );
     if (existingChunks && existingChunks.length > 0) {
         console.log("Transcript already has chunks:");
-        const chunksArray = existingChunks.map(chunk => chunk.chunk_text);
-        console.log(chunksArray);
+        await printChunks(transcriptRecord);
         process.exit(0);
     }
 
@@ -143,9 +156,6 @@ ${videoTranscript}`;
         process.exit(1);
     }
 
-    console.log("chunks:");
-    console.log(chunks);
-
     // Insert each chunk into the transcript_chunk table
     await db.tx(async t => {
         for (const chunk of chunks) {
@@ -157,6 +167,8 @@ ${videoTranscript}`;
     });
 
     console.log("Chunks inserted successfully.");
+
+    await printChunks(transcriptRecord);
 
     pgp.end();
 }

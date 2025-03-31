@@ -37,8 +37,10 @@ async function main() {
         // Query the database for the top 5 relevant transcript chunks using cosine similarity.
         console.log('Querying database for relevant transcript chunks using cosine similarity...');
         const results = await db.any(
-            `SELECT 
+            `SELECT
+         t.raw_transcript,
          tc.chunk_text,
+         tc.line_number,
          video.video_id,
          video.title,
          'https://youtube.com/watch?v=' || video.video_id AS youtube_url,
@@ -61,7 +63,9 @@ async function main() {
         console.log(`Found ${results.length} relevant transcript chunk(s):`);
         for (const row of results) {
             console.log('----------------------------------------');
-            console.log(`YouTube URL   : ${row.youtube_url}`);
+            const start = row.raw_transcript[row.line_number].start;
+            const youtube_url = `https://www.youtube.com/watch?v=${row.video_id}&t=${Math.floor(start)}`;
+            console.log(`YouTube URL   : ${youtube_url}`);
             console.log(`Video Title   : ${row.title}`);
             console.log(`Transcript    : ${row.chunk_text}`);
             console.log(`Relevance Score (1 is best): ${row.relevance.toFixed(4)}`);
