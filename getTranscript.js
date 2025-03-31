@@ -4,7 +4,7 @@ import pgPromise from 'pg-promise';
 const pgp = pgPromise();
 const db = pgp(process.env.DATABASE_URL);
 
-const allowFetch = false;
+const allowFetch = true;
 
 async function getTranscript(videoId) {
     try {
@@ -25,21 +25,18 @@ function validateResponse(data) {
         return false;
     }
 
-    data = data.snippets;
+    const snippets = data.snippets;
 
     // Check if the input is an array.
-    if (!Array.isArray(data)) {
+    if (!Array.isArray(snippets)) {
         return false;
     }
 
-    // Loop over each item in the array.
-    for (const item of data) {
-        // Ensure the item is an object.
+    // Validate each item in the array.
+    for (const item of snippets) {
         if (typeof item !== 'object' || item === null) {
             return false;
         }
-
-        // Validate that the required properties exist and have the correct types.
         if (
             typeof item.duration !== 'number' ||
             typeof item.start !== 'number' ||
@@ -48,57 +45,66 @@ function validateResponse(data) {
             return false;
         }
     }
-
-    // All checks passed.
     return true;
 }
 
 async function main() {
-    // const videoId = 'N_0ay7YLcdI'; // assembly line
-    // const videoId = 'Qr_6J3b8ARc'; // fusion
-    const videoId = 'vMOFc9fjEIk'; // thaumcraft infusion SFM
+    // Retrieve all videos that are related to GTNH, are not live streams, and lack a transcript.
+    // const videos = await db.any(`
+    //     SELECT v.id, v.video_id
+    //     FROM video v
+    //     LEFT JOIN transcript t ON v.id = t.video_id
+    //     WHERE v.related_to_GTNH = true AND v.live_stream = false AND t.id IS NULL
+    // `);
 
-    // Check if the video exists in the database.
-    const videoRecord = await db.oneOrNone('SELECT id FROM video WHERE video_id = $1', [videoId]);
-    if (!videoRecord) {
-        console.error(`Video ${videoId} not found in the database.`);
-        process.exit(1);
+    const channelName = 'AverageGregTechPlayer';
+
+    const videos = await db.any(`
+        SELECT v.*
+        FROM video v
+        JOIN channel c ON c.id = v.channel_id
+        LEFT JOIN transcript t ON t.video_id = v.id
+        WHERE c.channel_name = $1
+            AND v.related_to_GTNH = true
+            AND v.live_stream = false
+            AND t.id IS NULL;
+    `, [channelName]);
+
+
+    if (videos.length === 0) {
+        console.log("No videos found that require transcript fetching.");
+        process.exit(0);
     }
 
-    // Check if a transcript already exists for this video.
-    let transcriptRecord = await db.oneOrNone(
-        'SELECT id, raw_transcript FROM transcript WHERE video_id = $1',
-        [videoRecord.id]
-    );
+    console.log(`Found ${videos.length} videos that require transcripts to be fetched.`);
 
-    if (!transcriptRecord) {
+    // const batchSize = 5;
+    // const videosSlice = videos.slice(0, batchSize);
+    // console.log(`getting the transcripts for the first ${batchSize} vidoes`);
+
+    for (const videoRecord of videos) {
         if (!allowFetch) {
-            console.log('Transcript not found in database, but allowFetch is false');
+            console.log(`Transcript not found for video ${videoRecord.video_id}, but allowFetch is false.`);
             process.exit(1);
         }
-        console.log('Transcript not found in database. Fetching transcript...');
-        const response = await getTranscript(videoId);
+
+        console.log(`Transcript not found for video ${videoRecord.video_id}. Fetching transcript...`);
+        const response = await getTranscript(videoRecord.video_id);
         if (!validateResponse(response)) {
             fs.writeFileSync("failed_transcript.txt", JSON.stringify(response));
             console.log(response);
-            console.error("Transcript format is invalid.");
+            console.error(`Transcript format is invalid for video ${videoRecord.video_id}.`);
             process.exit(1);
         }
         const raw_transcript = response.snippets;
-        // Insert the new transcript into the database.
         await db.none(
             'INSERT INTO transcript (video_id, raw_transcript) VALUES ($1, $2:json)',
             [videoRecord.id, raw_transcript]
         );
-        transcriptRecord = { raw_transcript };
-        console.log('Transcript fetched and stored in the database.');
-    } else {
-        console.log('Transcript already exists in the database.');
+        console.log(`Transcript fetched and stored in the database for video ${videoRecord.video_id}.`);
+        console.log("Transcript segment count:", raw_transcript.length);
+        console.log("First segment:", raw_transcript[0]);
     }
-
-    // Log transcript details.
-    console.log("Transcript segment count:", transcriptRecord.raw_transcript.length);
-    console.log("First segment:", transcriptRecord.raw_transcript[0]);
 
     pgp.end();
 }
