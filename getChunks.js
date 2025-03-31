@@ -1,10 +1,11 @@
 import OpenAI from "openai";
 import dotenv from "dotenv";
 import pgPromise from "pg-promise";
+// import * as fs from 'fs'
 
 dotenv.config();
 
-const allowFetch = false;
+const allowFetch = true;
 
 // Define the video id to process
 const videoId = 'N_0ay7YLcdI';
@@ -63,7 +64,10 @@ async function main() {
         process.exit(1);
     }
     // Combine all text segments into one transcript string
-    const videoTranscript = transcriptArray.map(item => item.text).join("\n");
+    const videoTranscript = transcriptArray
+        .map((item, index) => `${index + 1}: ${item.text}`)
+        .join("\n");
+
 
     // Use the video title from the video record (or fallback to an empty string)
     const videoTitle = videoRecord.title || "";
@@ -82,16 +86,21 @@ async function main() {
 
 Your task is to analyze the provided video transcript and extract concise, self-contained informational chunks specifically related to GTNH. These chunks should include actionable tips, technical details, and key facts—such as how to automate a machine, effective strategies, or other useful gameplay insights. Do not simply summarize the video; instead, extract discrete pieces of information.
 
+Each chunk should also link back to the relavent part of the transcript with a line number. This line number will be used to create a youtube link with a timestamp so the users of the app can go directly to the part in a video where the information came from.
+
 Guidelines:
 - Each chunk should be clear and self-contained.
 - Limit each chunk to no more than 150 words.
 - Ignore filler content, off-topic chatter, or generic commentary.
-- Return the chunks as a JSON array of strings. Only output the JSON array, with no additional text.
+- Return the chunks as a JSON array of objects like this [{"text": "chunk text", "line": 25}]
+- Only output the JSON array, with no additional text.
 
 Video Title: “${videoTitle}”
 
-Video Transcript:
+Video transcript with line numbers:
 ${videoTranscript}`;
+
+    // fs.writeFileSync("prompt.txt", prompt);
 
     if (!allowFetch) {
         console.log("transcript needs chunks, but allowFetch is false");
@@ -108,7 +117,8 @@ ${videoTranscript}`;
 
     const result = completion.choices[0].message.content;
 
-    // Validate that the result is valid JSON and in the expected format (an array of strings)
+    // Validate that the result is valid JSON and in the expected format:
+    // An array of objects with properties "text" (a string) and "line" (a number)
     let chunks;
     try {
         chunks = JSON.parse(result);
@@ -118,8 +128,17 @@ ${videoTranscript}`;
         process.exit(1);
     }
 
-    if (!Array.isArray(chunks) || !chunks.every(chunk => typeof chunk === 'string')) {
-        console.error("JSON format is incorrect: expected an array of strings");
+    if (
+        !Array.isArray(chunks) ||
+        !chunks.every(chunk =>
+            chunk &&
+            typeof chunk === 'object' &&
+            !Array.isArray(chunk) &&
+            typeof chunk.text === 'string' &&
+            typeof chunk.line === 'number'
+        )
+    ) {
+        console.error("JSON format is incorrect: expected an array of objects with properties 'text' (string) and 'line' (number)");
         console.log(chunks);
         process.exit(1);
     }
@@ -131,13 +150,15 @@ ${videoTranscript}`;
     await db.tx(async t => {
         for (const chunk of chunks) {
             await t.none(
-                "INSERT INTO transcript_chunk (transcript_id, chunk_text) VALUES ($1, $2)",
-                [transcriptRecord.id, chunk]
+                "INSERT INTO transcript_chunk (transcript_id, chunk_text, line_number) VALUES ($1, $2, $3)",
+                [transcriptRecord.id, chunk.text, chunk.line]
             );
         }
     });
 
     console.log("Chunks inserted successfully.");
+
+    pgp.end();
 }
 
 main().catch(error => {

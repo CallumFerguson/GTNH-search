@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS video (
   id SERIAL PRIMARY KEY,
   video_id VARCHAR(255) UNIQUE NOT NULL,
   channel_id INTEGER NOT NULL REFERENCES channel(id),
-  title VARCHAR(255)
+  title VARCHAR(255),
+  related_to_GTNH BOOLEAN
 );
 `;
 
@@ -40,7 +41,8 @@ const transcript_chunk = `
 CREATE TABLE IF NOT EXISTS transcript_chunk (
   id SERIAL PRIMARY KEY,
   transcript_id INTEGER NOT NULL REFERENCES transcript(id),
-  chunk_text TEXT
+  chunk_text TEXT,
+  line_number INTEGER NOT NULL DEFAULT 0
 );
 `;
 
@@ -95,6 +97,15 @@ const runMigrations = async () => {
       {
         name: 'add-related_to_GTNH-to-video',
         sql: `ALTER TABLE video ADD COLUMN IF NOT EXISTS related_to_GTNH BOOLEAN;`
+      },
+      {
+        name: 'update-line_number-to-transcript_chunk',
+        sql: `
+          ALTER TABLE transcript_chunk ADD COLUMN IF NOT EXISTS line_number INTEGER;
+          ALTER TABLE transcript_chunk ALTER COLUMN line_number SET DEFAULT 0;
+          UPDATE transcript_chunk SET line_number = 0 WHERE line_number IS NULL;
+          ALTER TABLE transcript_chunk ALTER COLUMN line_number SET NOT NULL;
+        `
       }
     ];
 
