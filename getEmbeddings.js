@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 
 dotenv.config();
 
-const allowFetch = false;
+const allowFetch = true;
 
 const videoId = 'N_0ay7YLcdI';
 

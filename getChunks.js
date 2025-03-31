@@ -5,7 +5,7 @@ import pgPromise from "pg-promise";
 
 dotenv.config();
 
-const allowFetch = false;
+const allowFetch = true;
 
 // Define the video id to process
 const videoId = 'N_0ay7YLcdI';
