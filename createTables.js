@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS video (
   video_id VARCHAR(255) UNIQUE NOT NULL,
   channel_id INTEGER NOT NULL REFERENCES channel(id),
   title VARCHAR(255),
-  related_to_GTNH BOOLEAN
+  related_to_GTNH BOOLEAN,
+  live_stream BOOLEAN
 );
 `;
 
@@ -106,6 +107,10 @@ const runMigrations = async () => {
           UPDATE transcript_chunk SET line_number = 0 WHERE line_number IS NULL;
           ALTER TABLE transcript_chunk ALTER COLUMN line_number SET NOT NULL;
         `
+      },
+      {
+        name: 'add-live_stream-to-video',
+        sql: `ALTER TABLE video ADD COLUMN IF NOT EXISTS live_stream BOOLEAN;`
       }
     ];
 
