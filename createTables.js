@@ -9,6 +9,7 @@ const db = pgp({
   port: 5432,            // replace with your database port if different
 });
 
+// Initial table creation queries
 const channel = `
 CREATE TABLE IF NOT EXISTS channel (
   id SERIAL PRIMARY KEY,
@@ -27,22 +28,6 @@ CREATE TABLE IF NOT EXISTS video (
 );
 `;
 
-// the transcript JSONB is the unedited transcript in the form:
-/*
-[
-  {
-    text: 'example text',
-    start: 0.16,
-    duration: 4.719
-  },
-  {
-    text: 'example text',
-    start: 5.72,
-    duration: 3.526
-  },
-  ...
-]
-*/
 const transcript = `
 CREATE TABLE IF NOT EXISTS transcript (
   id SERIAL PRIMARY KEY,
@@ -51,8 +36,6 @@ CREATE TABLE IF NOT EXISTS transcript (
 );
 `;
 
-// transcript chunks are useful bits of information that can be embedded and searched in a vector database. The chunks can be things like facts, tips and tricks, etc.
-// chunks are extracted from the transcript by an LLM
 const transcript_chunk = `
 CREATE TABLE IF NOT EXISTS transcript_chunk (
   id SERIAL PRIMARY KEY,
@@ -61,7 +44,6 @@ CREATE TABLE IF NOT EXISTS transcript_chunk (
 );
 `;
 
-// most of the time each transcript_chunk will have just one chunk_embedding, but there could be multiple if multiple different embedding models were tested
 const chunk_embedding = `
 CREATE TABLE IF NOT EXISTS chunk_embedding (
   id SERIAL PRIMARY KEY,
@@ -72,34 +54,83 @@ CREATE TABLE IF NOT EXISTS chunk_embedding (
 );
 `;
 
+// Function to create initial tables
 const createTables = async () => {
   try {
-    // Create channel table
     await db.none(channel);
-    console.log('Created table: channel');
+    console.log('Create table if not exists: channel');
 
-    // Create video table
     await db.none(video);
-    console.log('Created table: video');
+    console.log('Create table if not exists: video');
 
-    // Create transcript table
     await db.none(transcript);
-    console.log('Created table: transcript');
+    console.log('Create table if not exists: transcript');
 
-    // Create transcript_chunk table
     await db.none(transcript_chunk);
-    console.log('Created table: transcript_chunk');
+    console.log('Create table if not exists: transcript_chunk');
 
-    // Create chunk_embedding table
     await db.none(chunk_embedding);
-    console.log('Created table: chunk_embedding');
-
+    console.log('Create table if not exists: chunk_embedding');
   } catch (err) {
     console.error('Error creating tables:', err);
+    throw err;
+  }
+};
+
+// Basic migration runner
+const runMigrations = async () => {
+  try {
+    // Create the migrations tracking table if it doesn't exist
+    await db.none(`
+      CREATE TABLE IF NOT EXISTS migrations (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL,
+        applied_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Ensured migrations table exists.');
+
+    // Define your migrations here
+    const migrations = [
+      {
+        name: 'add-related_to_GTNH-to-video',
+        sql: `ALTER TABLE video ADD COLUMN IF NOT EXISTS related_to_GTNH BOOLEAN;`
+      }
+    ];
+
+    // Run each migration if it hasn't been applied yet
+    for (const migration of migrations) {
+      const applied = await db.oneOrNone(
+        'SELECT id FROM migrations WHERE name = $1',
+        [migration.name]
+      );
+
+      if (!applied) {
+        console.log(`Applying migration: ${migration.name}`);
+        await db.none(migration.sql);
+        await db.none('INSERT INTO migrations(name) VALUES($1)', [migration.name]);
+        console.log(`Migration applied: ${migration.name}`);
+      } else {
+        console.log(`Migration already applied: ${migration.name}`);
+      }
+    }
+  } catch (err) {
+    console.error('Error during migrations:', err);
+    throw err;
+  }
+};
+
+// Main function to create tables and run migrations
+const run = async () => {
+  try {
+    await createTables();
+    await runMigrations();
+  } catch (err) {
+    console.error('Error in run:', err);
   } finally {
     pgp.end();
     console.log('Disconnected from the database.');
   }
 };
 
-createTables();
+run();
