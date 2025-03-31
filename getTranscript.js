@@ -1,3 +1,4 @@
+import fs from 'fs';
 import pgPromise from 'pg-promise';
 
 const pgp = pgPromise();
@@ -19,7 +20,13 @@ async function getTranscript(videoId) {
     }
 }
 
-function validateTranscriptFormat(data) {
+function validateResponse(data) {
+    if (!("snippets" in data)) {
+        return false;
+    }
+
+    data = data.snippets;
+
     // Check if the input is an array.
     if (!Array.isArray(data)) {
         return false;
@@ -47,7 +54,9 @@ function validateTranscriptFormat(data) {
 }
 
 async function main() {
-    const videoId = 'N_0ay7YLcdI';
+    // const videoId = 'N_0ay7YLcdI'; // assembly line
+    // const videoId = 'Qr_6J3b8ARc'; // fusion
+    const videoId = 'vMOFc9fjEIk'; // thaumcraft infusion SFM
 
     // Check if the video exists in the database.
     const videoRecord = await db.oneOrNone('SELECT id FROM video WHERE video_id = $1', [videoId]);
@@ -68,11 +77,14 @@ async function main() {
             process.exit(1);
         }
         console.log('Transcript not found in database. Fetching transcript...');
-        const raw_transcript = await getTranscript(videoId);
-        if (!validateTranscriptFormat(raw_transcript)) {
+        const response = await getTranscript(videoId);
+        if (!validateResponse(response)) {
+            fs.writeFileSync("failed_transcript.txt", JSON.stringify(response));
+            console.log(response);
             console.error("Transcript format is invalid.");
             process.exit(1);
         }
+        const raw_transcript = response.snippets;
         // Insert the new transcript into the database.
         await db.none(
             'INSERT INTO transcript (video_id, raw_transcript) VALUES ($1, $2:json)',
