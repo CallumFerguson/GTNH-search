@@ -1,14 +1,10 @@
 import OpenAI from "openai";
 import dotenv from "dotenv";
 import pgPromise from "pg-promise";
-// import * as fs from 'fs'
 
 dotenv.config();
 
 const allowFetch = true;
-
-// Define the video id to process
-const videoId = 'N_0ay7YLcdI';
 
 // Initialize pg-promise
 const pgp = pgPromise();
@@ -16,90 +12,76 @@ const db = pgp(process.env.DATABASE_URL);
 
 // Initialize the OpenAI client
 const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Print chunks for a transcript record using its transcript_id and raw_transcript.
+// Note: Since the transcript was split with 1-indexed line numbers,
+// we subtract 1 when indexing the transcript array.
 async function printChunks(transcriptRecord) {
     const chunks = await db.any(
         "SELECT chunk_text, line_number FROM transcript_chunk WHERE transcript_id = $1",
-        [transcriptRecord.id]
+        [transcriptRecord.transcript_id]
     );
     for (const chunk of chunks) {
-        console.log("chunk:")
+        console.log("chunk:");
         console.log(chunk.chunk_text);
-        const start = transcriptRecord.raw_transcript[chunk.line_number].start;
-        console.log(`https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(start)}\n`);
+        // Adjust the index since line numbers are 1-indexed.
+        const transcriptLine = transcriptRecord.raw_transcript[chunk.line_number - 1];
+        const start = transcriptLine?.start || 0;
+        console.log(`https://www.youtube.com/watch?v=${transcriptRecord.video_id}&t=${Math.floor(start)}\n`);
     }
-
 }
 
 async function main() {
-    // Check if the video exists in the database
-    const videoRecord = await db.oneOrNone(
-        "SELECT id, video_id, title FROM video WHERE video_id = $1",
-        [videoId]
+    // Query for all videos that have a transcript (using the transcript table)
+    // and where the transcript does not yet have any chunks.
+    const videosToProcess = await db.any(
+        `SELECT 
+        v.id AS video_pk, 
+        v.video_id, 
+        v.title, 
+        t.id AS transcript_id, 
+        t.raw_transcript 
+     FROM video v
+     JOIN transcript t ON t.video_id = v.id
+     WHERE NOT EXISTS (
+         SELECT 1 FROM transcript_chunk tc WHERE tc.transcript_id = t.id
+     )
+     ORDER BY v.id`
     );
-    if (!videoRecord) {
-        console.error("Video not found in the database");
-        process.exit(1);
-    }
 
-    console.log(`video with id ${videoId} exists in database`);
-    console.log(`title: ${videoRecord.title}`);
-
-    // Check if there's at least one transcript for this video (get the latest one)
-    const transcriptRecord = await db.oneOrNone(
-        "SELECT id, raw_transcript FROM transcript WHERE video_id = $1 ORDER BY id DESC LIMIT 1",
-        [videoRecord.id]
-    );
-    if (!transcriptRecord) {
-        console.error("Transcript not found for the video");
-        process.exit(1);
-    }
-
-    console.log("video has transcript");
-
-    // Check if the transcript already has chunks; if so, retrieve them from the database and exit early
-    const existingChunks = await db.any(
-        "SELECT chunk_text FROM transcript_chunk WHERE transcript_id = $1",
-        [transcriptRecord.id]
-    );
-    if (existingChunks && existingChunks.length > 0) {
-        console.log("Transcript already has chunks:");
-        await printChunks(transcriptRecord);
+    if (!videosToProcess || videosToProcess.length === 0) {
+        console.log("No videos found that require chunking.");
         process.exit(0);
     }
 
-    // Verify that raw_transcript is in the expected format and extract the text
-    const transcriptArray = transcriptRecord.raw_transcript;
-    if (!Array.isArray(transcriptArray)) {
-        console.error("Transcript is not in the expected format");
-        process.exit(1);
-    }
-    // Combine all text segments into one transcript string
-    const videoTranscript = transcriptArray
-        .map((item, index) => `${index + 1}: ${item.text}`)
-        .join("\n");
+    console.log(`Found ${videosToProcess.length} videos that have transcripts but no chunks.`);
 
+    for (const record of videosToProcess) {
+        try {
+            console.log(`\nProcessing video: ${record.video_id}`);
+            console.log(`Title: ${record.title}`);
 
-    // Use the video title from the video record (or fallback to an empty string)
-    const videoTitle = videoRecord.title || "";
+            // Verify that raw_transcript is in the expected format (an array)
+            if (!Array.isArray(record.raw_transcript)) {
+                console.error("Transcript is not in the expected format for video", record.video_id);
+                process.exit(1);
+            }
 
-    //     const prompt = `I’m trying to make an app where users can ask questions about the minecraft modpack gregtech new horizons (GTNH). A lot of the best information about GTNH is found in youtube videos. I’m making a vector database that uses the transcripts of videos. The problem is the transcripts are often from long lets play style videos, and are not very information dense. Your job is to look at the video transcript, and create chunks of data from it. These chunks should contain useful bits of information about GTNH that can be embedded and searched in a vector database. The chunks can be things like facts, tips and tricks, details about how to automate a machine, the best way to do certain things in GTNH, etc. The chunks should be things you learned about GTNH from watching the video, not a summary of the video.
+            // Build a transcript string with line numbers (lines are 1-indexed)
+            const videoTranscript = record.raw_transcript
+                .map((item, index) => `${index + 1}: ${item.text}`)
+                .join("\n");
 
-    // Format the chunks of data as a json array where each item is just a string, not an object. Only return the json, do not include any additional text in your response.
+            const videoTitle = record.title || "";
 
-    // The title of the video is “${videoTitle}”
-
-    // And here is the video transcript:
-
-    // ${videoTranscript}`;
-
-    const prompt = `I’m building an app that allows users to ask questions about the Minecraft modpack Gregtech New Horizons (GTNH). Many of the best insights about GTNH come from YouTube videos. I’m creating a vector database by embedding information from video transcripts, but these transcripts are often lengthy and filled with casual commentary.
+            // Build the prompt to generate chunks
+            const prompt = `I’m building an app that allows users to ask questions about the Minecraft modpack Gregtech New Horizons (GTNH). Many of the best insights about GTNH come from YouTube videos. I’m creating a vector database by embedding information from video transcripts, but these transcripts are often lengthy and filled with casual commentary.
 
 Your task is to analyze the provided video transcript and extract concise, self-contained informational chunks specifically related to GTNH. These chunks should include actionable tips, technical details, and key facts—such as how to automate a machine, effective strategies, or other useful gameplay insights. Do not simply summarize the video; instead, extract discrete pieces of information.
 
-Each chunk should also link back to the relavent part of the transcript with a line number. This line number will be used to create a youtube link with a timestamp so the users of the app can go directly to the part in a video where the information came from.
+Each chunk should also link back to the relevant part of the transcript with a line number. This line number will be used to create a YouTube link with a timestamp so the users of the app can go directly to the part in a video where the information came from.
 
 Guidelines:
 - Each chunk should be clear and self-contained.
@@ -113,67 +95,73 @@ Video Title: “${videoTitle}”
 Video transcript with line numbers:
 ${videoTranscript}`;
 
-    // fs.writeFileSync("prompt.txt", prompt);
+            if (!allowFetch) {
+                console.log("Transcript needs chunks, but allowFetch is false");
+                process.exit(0);
+            }
 
-    if (!allowFetch) {
-        console.log("transcript needs chunks, but allowFetch is false");
-        process.exit(1);
-    }
+            console.log("Generating chunks...");
 
-    console.log("generating chunks...");
+            // Request completion from OpenAI
+            const completion = await client.chat.completions.create({
+                model: "o3-mini",
+                messages: [{ role: "user", content: prompt }],
+            });
 
-    // Request completion from OpenAI
-    const completion = await client.chat.completions.create({
-        model: 'o3-mini',
-        messages: [{ role: 'user', content: prompt }],
-    });
+            const result = completion.choices[0].message.content;
 
-    const result = completion.choices[0].message.content;
+            // Validate that the result is valid JSON in the expected format
+            let chunks;
+            try {
+                chunks = JSON.parse(result);
+            } catch (err) {
+                console.error("Invalid JSON returned from LLM for video", record.video_id);
+                console.log(result);
+                process.exit(1);
+            }
 
-    // Validate that the result is valid JSON and in the expected format:
-    // An array of objects with properties "text" (a string) and "line" (a number)
-    let chunks;
-    try {
-        chunks = JSON.parse(result);
-    } catch (err) {
-        console.error("Invalid JSON returned from LLM");
-        console.log(result);
-        process.exit(1);
-    }
+            if (
+                !Array.isArray(chunks) ||
+                !chunks.every(
+                    (chunk) =>
+                        chunk &&
+                        typeof chunk === "object" &&
+                        !Array.isArray(chunk) &&
+                        typeof chunk.text === "string" &&
+                        typeof chunk.line === "number"
+                )
+            ) {
+                console.error(
+                    "JSON format is incorrect for video",
+                    record.video_id,
+                    ": expected an array of objects with properties 'text' (string) and 'line' (number)"
+                );
+                console.log(chunks);
+                process.exit(1);
+            }
 
-    if (
-        !Array.isArray(chunks) ||
-        !chunks.every(chunk =>
-            chunk &&
-            typeof chunk === 'object' &&
-            !Array.isArray(chunk) &&
-            typeof chunk.text === 'string' &&
-            typeof chunk.line === 'number'
-        )
-    ) {
-        console.error("JSON format is incorrect: expected an array of objects with properties 'text' (string) and 'line' (number)");
-        console.log(chunks);
-        process.exit(1);
-    }
+            // Insert each chunk into the transcript_chunk table in a transaction
+            await db.tx(async (t) => {
+                for (const chunk of chunks) {
+                    await t.none(
+                        "INSERT INTO transcript_chunk (transcript_id, chunk_text, line_number) VALUES ($1, $2, $3)",
+                        [record.transcript_id, chunk.text, chunk.line]
+                    );
+                }
+            });
 
-    // Insert each chunk into the transcript_chunk table
-    await db.tx(async t => {
-        for (const chunk of chunks) {
-            await t.none(
-                "INSERT INTO transcript_chunk (transcript_id, chunk_text, line_number) VALUES ($1, $2, $3)",
-                [transcriptRecord.id, chunk.text, chunk.line]
-            );
+            console.log("Chunks inserted successfully.");
+            await printChunks({ ...record, transcript_id: record.transcript_id });
+        } catch (error) {
+            console.error("Error processing video", record.video_id, ":", error);
+            process.exit(1);
         }
-    });
-
-    console.log("Chunks inserted successfully.");
-
-    await printChunks(transcriptRecord);
+    }
 
     pgp.end();
 }
 
-main().catch(error => {
+main().catch((error) => {
     console.error("Error occurred:", error);
     process.exit(1);
 });

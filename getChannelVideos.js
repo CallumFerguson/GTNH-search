@@ -86,6 +86,7 @@ async function main() {
         playlistResponse.data.items.forEach(item => {
             const videoId = item.snippet.resourceId.videoId;
             const title = item.snippet.title;
+            // const published_at = item.snippet.publishedAt;
             videos.push({ video_id: videoId, title: title });
         });
         nextPageToken = playlistResponse.data.nextPageToken;
