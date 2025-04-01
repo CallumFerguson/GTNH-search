@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 
 dotenv.config();
 
-const question = "how to automate an assembly line";
+const question = "how do I automate titanium";
 
 const OPENAI_MODEL = 'text-embedding-3-small';
 
@@ -67,7 +67,7 @@ async function main() {
             const youtube_url = `https://www.youtube.com/watch?v=${row.video_id}&t=${Math.floor(start)}`;
             console.log(`YouTube URL   : ${youtube_url}`);
             console.log(`Video Title   : ${row.title}`);
-            console.log(`Transcript    : ${row.chunk_text}`);
+            console.log(`Chunk text    : ${row.chunk_text}`);
             console.log(`Relevance Score (1 is best): ${row.relevance.toFixed(4)}`);
         }
     } catch (error) {
