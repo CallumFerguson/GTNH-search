@@ -1,40 +1,49 @@
+import express from 'express';
 import pgPromise from 'pg-promise';
 import dotenv from 'dotenv';
 import OpenAI from 'openai';
+import cors from 'cors';
 
 dotenv.config();
 
-const question = "how do I automate titanium";
+const app = express();
+const port = process.env.PORT || 3000;
 
-const OPENAI_MODEL = 'text-embedding-3-small';
+// Enable CORS so that the standalone HTML file can access the API
+app.use(cors());
+app.use(express.json());
 
 const pgp = pgPromise();
 const db = pgp(process.env.DATABASE_URL);
 
-// Initialize the OpenAI client.
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
-async function main() {
+const OPENAI_MODEL = 'text-embedding-3-small';
+
+app.get('/api/query', async (req, res) => {
+    // Use provided question or default to a sample question.
+    const question = req.query.question || "how do I automate titanium";
+
     try {
         console.log(`Generating embedding for the question: "${question}" ...`);
         const embeddingResponse = await openai.embeddings.create({
             model: OPENAI_MODEL,
             input: question,
         });
+
         if (
             !embeddingResponse.data ||
             !embeddingResponse.data[0] ||
             !embeddingResponse.data[0].embedding
         ) {
             console.error('Failed to generate embedding for the question.');
-            process.exit(1);
+            return res.status(500).json({ error: 'Failed to generate embedding for the question.' });
         }
         const questionEmbedding = embeddingResponse.data[0].embedding;
         console.log('Embedding generated for the question.');
 
-        // Query the database for the top 5 relevant transcript chunks using cosine similarity.
         console.log('Querying database for relevant transcript chunks using cosine similarity...');
         const results = await db.any(
             `SELECT
@@ -43,7 +52,7 @@ async function main() {
          tc.line_number,
          video.video_id,
          video.title,
-         'https://youtube.com/watch?v=' || video.video_id AS youtube_url,
+         ('https://youtube.com/watch?v=' || video.video_id) AS youtube_url,
          1 - (ce.embedding_vector <=> $1::vector) AS relevance
        FROM chunk_embedding ce
        JOIN transcript_chunk tc ON tc.id = ce.chunk_id
@@ -57,25 +66,27 @@ async function main() {
 
         if (results.length === 0) {
             console.error('No relevant transcript chunks found.');
-            process.exit(1);
+            return res.status(404).json({ error: 'No relevant transcript chunks found.' });
         }
 
-        console.log(`Found ${results.length} relevant transcript chunk(s):`);
-        for (const row of results) {
-            console.log('----------------------------------------');
-            const start = row.raw_transcript[row.line_number].start;
-            const youtube_url = `https://www.youtube.com/watch?v=${row.video_id}&t=${Math.floor(start)}`;
-            console.log(`YouTube URL   : ${youtube_url}`);
-            console.log(`Video Title   : ${row.title}`);
-            console.log(`Chunk text    : ${row.chunk_text}`);
-            console.log(`Relevance Score (1 is best): ${row.relevance.toFixed(4)}`);
-        }
+        // Optionally, adjust the YouTube URL with a start time if available from the raw transcript.
+        const enhancedResults = results.map(row => {
+            const start = row.raw_transcript && row.raw_transcript[row.line_number] && row.raw_transcript[row.line_number].start;
+            const youtubeUrlWithTime = start ? `https://www.youtube.com/watch?v=${row.video_id}&t=${Math.floor(start)}` : row.youtube_url;
+            return {
+                ...row,
+                youtube_url: youtubeUrlWithTime,
+                relevance: row.relevance
+            };
+        });
+
+        return res.json({ results: enhancedResults });
     } catch (error) {
         console.error('Error during query execution:', error);
-        process.exit(1);
-    } finally {
-        pgp.end();
+        return res.status(500).json({ error: 'Internal server error' });
     }
-}
+});
 
-main();
+app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+});
