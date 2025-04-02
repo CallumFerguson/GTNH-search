@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS transcript_chunk (
   id SERIAL PRIMARY KEY,
   transcript_id INTEGER NOT NULL REFERENCES transcript(id),
   chunk_text TEXT,
-  line_number INTEGER NOT NULL DEFAULT 0
+  line_number INTEGER NOT NULL DEFAULT 0,
+  chunking_method VARCHAR(255)
 );
 `;
 
@@ -121,6 +122,10 @@ const runMigrations = async () => {
       {
         name: 'add-has_subtitles-to-video',
         sql: `ALTER TABLE video ADD COLUMN IF NOT EXISTS has_subtitles BOOLEAN;`
+      },
+      {
+        name: 'add-chunking_method-to-transcript_chunk',
+        sql: `ALTER TABLE transcript_chunk ADD COLUMN IF NOT EXISTS chunking_method VARCHAR(255);`
       }
     ];
 
