@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS video (
   channel_id INTEGER NOT NULL REFERENCES channel(id),
   title VARCHAR(255),
   related_to_GTNH BOOLEAN,
-  live_stream BOOLEAN
+  live_stream BOOLEAN,
+  published_at TIMESTAMPTZ
 );
 `;
 
@@ -111,6 +112,10 @@ const runMigrations = async () => {
       {
         name: 'add-live_stream-to-video',
         sql: `ALTER TABLE video ADD COLUMN IF NOT EXISTS live_stream BOOLEAN;`
+      },
+      {
+        name: 'add-published_at-to-video',
+        sql: `ALTER TABLE video ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;`
       }
     ];
 

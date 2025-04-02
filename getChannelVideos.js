@@ -73,7 +73,7 @@ async function main() {
     }
     const uploadsPlaylistId = channelResponse.data.items[0].contentDetails.relatedPlaylists.uploads;
 
-    // Retrieve video IDs and titles from the uploads playlist
+    // Retrieve video IDs, titles, and published dates from the uploads playlist
     let videos = [];
     let nextPageToken = undefined;
     do {
@@ -86,8 +86,8 @@ async function main() {
         playlistResponse.data.items.forEach(item => {
             const videoId = item.snippet.resourceId.videoId;
             const title = item.snippet.title;
-            // const published_at = item.snippet.publishedAt;
-            videos.push({ video_id: videoId, title: title });
+            const publishedAt = item.snippet.publishedAt;
+            videos.push({ video_id: videoId, title: title, published_at: publishedAt });
         });
         nextPageToken = playlistResponse.data.nextPageToken;
     } while (nextPageToken);
@@ -99,9 +99,9 @@ async function main() {
         await db.tx(async t => {
             const queries = videos.map(video =>
                 t.none(
-                    `INSERT INTO video(video_id, channel_id, title) VALUES ($1, $2, $3)
+                    `INSERT INTO video(video_id, channel_id, title, published_at) VALUES ($1, $2, $3, $4)
                         ON CONFLICT (video_id) DO NOTHING`,
-                    [video.video_id, channelData.id, video.title]
+                    [video.video_id, channelData.id, video.title, video.published_at]
                 )
             );
             await t.batch(queries);

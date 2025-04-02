@@ -1,6 +1,6 @@
 import pgPromise from 'pg-promise';
 import { google } from 'googleapis';
-import fs from "fs"
+import fs from "fs";
 
 const pgp = pgPromise();
 const db = pgp({
@@ -12,11 +12,11 @@ const db = pgp({
 });
 
 /**
- * Retrieve all videos where live_stream is null.
+ * Retrieve all videos where live_stream is null or published_at is null.
  */
-async function getVideosWithNullLiveStream() {
+async function getVideosWithNullLiveStreamOrPublishedAt() {
     try {
-        return await db.any('SELECT * FROM video WHERE live_stream IS NULL');
+        return await db.any('SELECT * FROM video WHERE live_stream IS NULL OR published_at IS NULL');
     } catch (error) {
         console.error('Error fetching videos:', error);
         throw error;
@@ -24,13 +24,17 @@ async function getVideosWithNullLiveStream() {
 }
 
 /**
- * Update the live_stream field for a given video.
+ * Update the live_stream and published_at fields for a given video.
  * @param {string} videoId - The video_id from the video table.
- * @param {boolean} isLive - The boolean value to update.
+ * @param {boolean} isLive - The boolean value to update for live_stream.
+ * @param {string|null} publishedAt - The published date to update for published_at.
  */
-async function updateVideoLiveStream(videoId, isLive) {
+async function updateVideoData(videoId, isLive, publishedAt) {
     try {
-        await db.none('UPDATE video SET live_stream = $1 WHERE video_id = $2', [isLive, videoId]);
+        await db.none(
+            'UPDATE video SET live_stream = $1, published_at = $2 WHERE video_id = $3',
+            [isLive, publishedAt, videoId]
+        );
     } catch (error) {
         console.error(`Error updating video ${videoId}:`, error);
     }
@@ -38,8 +42,8 @@ async function updateVideoLiveStream(videoId, isLive) {
 
 /**
  * Processes an array of video objects in batches.
- * For each batch, calls the YouTube API to retrieve liveStreamingDetails
- * and then updates each video in the database accordingly.
+ * For each batch, calls the YouTube API to retrieve liveStreamingDetails and snippet data,
+ * then updates each video in the database accordingly.
  * @param {Array<Object>} videos - An array of video objects from the database.
  */
 async function checkVideosLiveStatus(videos) {
@@ -60,27 +64,29 @@ async function checkVideosLiveStatus(videos) {
         const videoIds = batch.map(video => video.video_id).join(',');
 
         try {
+            // Request both liveStreamingDetails and snippet data
             const response = await youtube.videos.list({
-                part: 'liveStreamingDetails',
+                part: 'liveStreamingDetails,snippet',
                 id: videoIds,
             });
 
-            // Create a map from videoId to live status (true if liveStreamingDetails exists and is non-empty)
-            const liveStatusMap = new Map();
+            // Create a map from videoId to an object with isLive and publishedAt values.
+            const videoDataMap = new Map();
             if (response.data.items) {
                 for (const item of response.data.items) {
                     const details = item.liveStreamingDetails;
                     const isLive = details ? Object.keys(details).length > 0 : false;
-                    liveStatusMap.set(item.id, isLive);
+                    const publishedAt = item.snippet && item.snippet.publishedAt ? item.snippet.publishedAt : null;
+                    videoDataMap.set(item.id, { isLive, publishedAt });
                 }
             }
 
             // Update each video in the batch
             for (const video of batch) {
-                // If the video isn't returned by the API, assume live_stream is false.
-                const isLive = liveStatusMap.has(video.video_id) ? liveStatusMap.get(video.video_id) : false;
-                await updateVideoLiveStream(video.video_id, isLive);
-                console.log(`Updated video ${video.video_id}: live_stream = ${isLive}`);
+                // If the video isn't returned by the API, assume live_stream is false and publishedAt remains null.
+                const videoData = videoDataMap.get(video.video_id) || { isLive: false, publishedAt: null };
+                await updateVideoData(video.video_id, videoData.isLive, videoData.publishedAt);
+                console.log(`Updated video ${video.video_id}: live_stream = ${videoData.isLive}, published_at = ${videoData.publishedAt}`);
             }
         } catch (error) {
             console.error(`Error processing batch starting at index ${i}:`, error);
@@ -90,12 +96,12 @@ async function checkVideosLiveStatus(videos) {
 }
 
 /**
- * Main function to process all videos with null live_stream.
+ * Main function to process all videos with null live_stream or published_at.
  */
 async function main() {
     try {
-        const videos = await getVideosWithNullLiveStream();
-        console.log(`Found ${videos.length} videos with live_stream null.`);
+        const videos = await getVideosWithNullLiveStreamOrPublishedAt();
+        console.log(`Found ${videos.length} videos with live_stream or published_at null.`);
 
         if (videos.length > 0) {
             await checkVideosLiveStatus(videos);
