@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS video (
   title VARCHAR(255),
   related_to_GTNH BOOLEAN,
   live_stream BOOLEAN,
-  published_at TIMESTAMPTZ
+  published_at TIMESTAMPTZ,
+  has_subtitles BOOLEAN
 );
 `;
 
@@ -116,6 +117,10 @@ const runMigrations = async () => {
       {
         name: 'add-published_at-to-video',
         sql: `ALTER TABLE video ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;`
+      },
+      {
+        name: 'add-has_subtitles-to-video',
+        sql: `ALTER TABLE video ADD COLUMN IF NOT EXISTS has_subtitles BOOLEAN;`
       }
     ];
 
