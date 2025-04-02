@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS transcript_chunk (
   transcript_id INTEGER NOT NULL REFERENCES transcript(id),
   chunk_text TEXT,
   line_number INTEGER NOT NULL DEFAULT 0,
-  chunking_method VARCHAR(255)
+  chunking_method VARCHAR(255),
+  video_timestamp INTEGER
 );
 `;
 
@@ -126,6 +127,10 @@ const runMigrations = async () => {
       {
         name: 'add-chunking_method-to-transcript_chunk',
         sql: `ALTER TABLE transcript_chunk ADD COLUMN IF NOT EXISTS chunking_method VARCHAR(255);`
+      },
+      {
+        name: 'add-video_timestamp-to-transcript_chunk',
+        sql: `ALTER TABLE transcript_chunk ADD COLUMN IF NOT EXISTS video_timestamp INTEGER;`
       }
     ];
 
