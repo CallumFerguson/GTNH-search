@@ -27,7 +27,7 @@ async function printChunks(transcriptRecord) {
 
 async function main() {
     // Query for all videos that have a transcript (using the transcript table)
-    // and where the transcript does not yet have any chunks.
+    // and where the transcript does not yet have any chunks made with basic-1 method
     const videosToProcess = await db.any(
         `SELECT 
             v.id AS video_pk, 
@@ -38,10 +38,14 @@ async function main() {
          FROM video v
          JOIN transcript t ON t.video_id = v.id
          WHERE NOT EXISTS (
-             SELECT 1 FROM transcript_chunk tc WHERE tc.transcript_id = t.id
+             SELECT 1 
+             FROM transcript_chunk tc 
+             WHERE tc.transcript_id = t.id 
+               AND tc.chunking_method = 'basic-1'
          )
          ORDER BY v.id`
     );
+
 
     if (!videosToProcess || videosToProcess.length === 0) {
         console.log("No videos found that require chunking.");
