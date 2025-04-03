@@ -21,6 +21,7 @@ const openai = new OpenAI({
 });
 
 const OPENAI_MODEL = 'text-embedding-3-small';
+const chunkingMethod = "basic-1";
 
 app.get('/api/query', async (req, res) => {
     // Use provided question or default to a sample question.
@@ -47,21 +48,22 @@ app.get('/api/query', async (req, res) => {
         console.log('Querying database for relevant transcript chunks using cosine similarity...');
         const results = await db.any(
             `SELECT
-         t.raw_transcript,
-         tc.chunk_text,
-         tc.line_number,
-         video.video_id,
-         video.title,
-         ('https://youtube.com/watch?v=' || video.video_id) AS youtube_url,
-         1 - (ce.embedding_vector <=> $1::vector) AS relevance
-       FROM chunk_embedding ce
-       JOIN transcript_chunk tc ON tc.id = ce.chunk_id
-       JOIN transcript t ON t.id = tc.transcript_id
-       JOIN video ON video.id = t.video_id
-       WHERE ce.embedding_model = $2
-       ORDER BY ce.embedding_vector <=> $1::vector
-       LIMIT 5`,
-            [questionEmbedding, OPENAI_MODEL]
+               tc.chunk_text,
+               tc.line_number,
+               tc.video_timestamp,
+               video.video_id,
+               video.title,
+               ('https://youtube.com/watch?v=' || video.video_id) AS youtube_url,
+               1 - (ce.embedding_vector <=> $1::vector) AS relevance
+             FROM chunk_embedding ce
+             JOIN transcript_chunk tc ON tc.id = ce.chunk_id
+             JOIN transcript t ON t.id = tc.transcript_id
+             JOIN video ON video.id = t.video_id
+             WHERE ce.embedding_model = $2
+               AND tc.chunking_method = $3
+             ORDER BY ce.embedding_vector <=> $1::vector ASC
+             LIMIT 5`,
+            [questionEmbedding, OPENAI_MODEL, chunkingMethod]
         );
 
         if (results.length === 0) {
@@ -71,7 +73,7 @@ app.get('/api/query', async (req, res) => {
 
         // Optionally, adjust the YouTube URL with a start time if available from the raw transcript.
         const enhancedResults = results.map(row => {
-            const start = row.raw_transcript && row.raw_transcript[row.line_number] && row.raw_transcript[row.line_number].start;
+            const start = row.video_timestamp;
             const youtubeUrlWithTime = start ? `https://www.youtube.com/watch?v=${row.video_id}&t=${Math.floor(start)}` : row.youtube_url;
             return {
                 ...row,
