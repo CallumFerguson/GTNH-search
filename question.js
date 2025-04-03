@@ -28,22 +28,43 @@ app.get('/api/query', async (req, res) => {
     const question = req.query.question || "how do I automate titanium";
 
     try {
-        console.log(`Generating embedding for the question: "${question}" ...`);
-        const embeddingResponse = await openai.embeddings.create({
-            model: OPENAI_MODEL,
-            input: question,
-        });
+        let questionEmbedding;
+        // Check if the query embedding is cached in the query_embedding table.
+        const cachedEmbedding = await db.oneOrNone(
+            `SELECT embedding_vector FROM query_embedding WHERE query_text = $1`,
+            [question]
+        );
 
-        if (
-            !embeddingResponse.data ||
-            !embeddingResponse.data[0] ||
-            !embeddingResponse.data[0].embedding
-        ) {
-            console.error('Failed to generate embedding for the question.');
-            return res.status(500).json({ error: 'Failed to generate embedding for the question.' });
+        if (cachedEmbedding) {
+            console.log(`Using cached embedding for question: "${question}"`);
+            questionEmbedding = cachedEmbedding.embedding_vector;
+        } else {
+            console.log(`Generating embedding for the question: "${question}" ...`);
+            const embeddingResponse = await openai.embeddings.create({
+                model: OPENAI_MODEL,
+                input: question,
+            });
+
+            if (
+                !embeddingResponse.data ||
+                !embeddingResponse.data[0] ||
+                !embeddingResponse.data[0].embedding
+            ) {
+                console.error('Failed to generate embedding for the question.');
+                return res.status(500).json({ error: 'Failed to generate embedding for the question.' });
+            }
+
+            questionEmbedding = embeddingResponse.data[0].embedding;
+            console.log('Embedding generated for the question.');
+
+            // Insert the new query embedding into the cache table.
+            await db.none(
+                `INSERT INTO query_embedding (query_text, embedding_source, embedding_model, embedding_vector)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (query_text) DO NOTHING`,
+                [question, 'openai', OPENAI_MODEL, questionEmbedding]
+            );
         }
-        const questionEmbedding = embeddingResponse.data[0].embedding;
-        console.log('Embedding generated for the question.');
 
         console.log('Querying database for relevant transcript chunks using cosine similarity...');
         const results = await db.any(
@@ -71,14 +92,16 @@ app.get('/api/query', async (req, res) => {
             return res.status(404).json({ error: 'No relevant transcript chunks found.' });
         }
 
-        // Optionally, adjust the YouTube URL with a start time if available from the raw transcript.
+        // Optionally, adjust the YouTube URL with a start time if available.
         const enhancedResults = results.map(row => {
             const start = row.video_timestamp;
-            const youtubeUrlWithTime = start ? `https://www.youtube.com/watch?v=${row.video_id}&t=${Math.floor(start)}` : row.youtube_url;
+            const youtubeUrlWithTime = start
+                ? `https://www.youtube.com/watch?v=${row.video_id}&t=${Math.floor(start)}`
+                : row.youtube_url;
             return {
                 ...row,
                 youtube_url: youtubeUrlWithTime,
-                relevance: row.relevance
+                relevance: row.relevance,
             };
         });
 

@@ -61,23 +61,38 @@ CREATE TABLE IF NOT EXISTS chunk_embedding (
 );
 `;
 
+// New table for caching query embeddings
+const query_embedding = `
+CREATE TABLE IF NOT EXISTS query_embedding (
+  id SERIAL PRIMARY KEY,
+  query_text TEXT UNIQUE NOT NULL,
+  embedding_source VARCHAR(255),
+  embedding_model VARCHAR(255),
+  embedding_vector vector(1536),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+`;
+
 // Function to create initial tables
 const createTables = async () => {
   try {
     await db.none(channel);
-    console.log('Create table if not exists: channel');
+    console.log('Created table if not exists: channel');
 
     await db.none(video);
-    console.log('Create table if not exists: video');
+    console.log('Created table if not exists: video');
 
     await db.none(transcript);
-    console.log('Create table if not exists: transcript');
+    console.log('Created table if not exists: transcript');
 
     await db.none(transcript_chunk);
-    console.log('Create table if not exists: transcript_chunk');
+    console.log('Created table if not exists: transcript_chunk');
 
     await db.none(chunk_embedding);
-    console.log('Create table if not exists: chunk_embedding');
+    console.log('Created table if not exists: chunk_embedding');
+
+    await db.none(query_embedding);
+    console.log('Created table if not exists: query_embedding');
   } catch (err) {
     console.error('Error creating tables:', err);
     throw err;
