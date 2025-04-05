@@ -90,6 +90,28 @@ CREATE TABLE IF NOT EXISTS wiki_page (
 );
 `;
 
+// New table for wiki page chunks
+const wiki_page_chunk = `
+CREATE TABLE IF NOT EXISTS wiki_page_chunk (
+  id SERIAL PRIMARY KEY,
+  wiki_page_id INTEGER NOT NULL REFERENCES wiki_page(id),
+  chunk_text TEXT,
+  chunk_index INTEGER NOT NULL DEFAULT 0,
+  chunking_method VARCHAR(255)
+);
+`;
+
+// New table for wiki page chunk embeddings
+const wiki_page_chunk_embedding = `
+CREATE TABLE IF NOT EXISTS wiki_page_chunk_embedding (
+  id SERIAL PRIMARY KEY,
+  wiki_page_chunk_id INTEGER NOT NULL REFERENCES wiki_page_chunk(id),
+  embedding_source VARCHAR(255),
+  embedding_model VARCHAR(255),
+  embedding_vector vector(1536)
+);
+`;
+
 // Function to create initial tables
 const createTables = async () => {
   try {
@@ -113,6 +135,12 @@ const createTables = async () => {
 
     await db.none(wiki_page);
     console.log('Created table if not exists: wiki_page');
+
+    await db.none(wiki_page_chunk);
+    console.log('Created table if not exists: wiki_page_chunk');
+
+    await db.none(wiki_page_chunk_embedding);
+    console.log('Created table if not exists: wiki_page_chunk_embedding');
   } catch (err) {
     console.error('Error creating tables:', err);
     throw err;
