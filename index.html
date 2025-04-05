@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Transcript Query</title>
+    <title>Transcript and Wiki Query</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -12,7 +12,7 @@
         }
 
         .container {
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
             background: white;
             padding: 20px;
@@ -48,10 +48,24 @@
             background: #0056b3;
         }
 
-        .result {
+        .results-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
             margin-top: 20px;
-            border-top: 1px solid #ccc;
-            padding-top: 20px;
+        }
+
+        .results-column {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: #fafafa;
+        }
+
+        .results-column h2 {
+            text-align: center;
+            color: #007BFF;
         }
 
         .result-item {
@@ -60,9 +74,9 @@
             border-bottom: 1px solid #eaeaea;
         }
 
-        .result-item h2 {
+        .result-item h3 {
             margin: 0;
-            font-size: 20px;
+            font-size: 18px;
             color: #007BFF;
         }
 
@@ -81,18 +95,28 @@
 
 <body>
     <div class="container">
-        <h1>Transcript Query</h1>
+        <h1>Transcript and Wiki Query</h1>
         <input type="text" id="questionInput" placeholder="Enter your question" />
         <button id="queryButton">Search</button>
-        <div id="results" class="result"></div>
         <div id="error" class="error"></div>
+        <div id="results-container" class="results-container">
+            <div id="transcriptResults" class="results-column">
+                <h2>Transcript Results</h2>
+            </div>
+            <div id="wikiResults" class="results-column">
+                <h2>Wiki Page Results</h2>
+            </div>
+        </div>
     </div>
     <script>
         document.getElementById('queryButton').addEventListener('click', async () => {
             const question = document.getElementById('questionInput').value.trim();
-            const resultsDiv = document.getElementById('results');
+            const transcriptResultsDiv = document.getElementById('transcriptResults');
+            const wikiResultsDiv = document.getElementById('wikiResults');
             const errorDiv = document.getElementById('error');
-            resultsDiv.innerHTML = '';
+
+            transcriptResultsDiv.innerHTML = '<h2>Transcript Results</h2>';
+            wikiResultsDiv.innerHTML = '<h2>Wiki Page Results</h2>';
             errorDiv.textContent = '';
 
             if (!question) {
@@ -106,28 +130,67 @@
                     throw new Error('Error fetching data from API');
                 }
                 const data = await response.json();
-                if (data.results && data.results.length > 0) {
-                    data.results.forEach(item => {
+
+                // Display transcript results
+                if (data.transcriptResults && data.transcriptResults.length > 0) {
+                    data.transcriptResults.forEach(item => {
                         const itemDiv = document.createElement('div');
                         itemDiv.classList.add('result-item');
-                        const title = document.createElement('h2');
+
+                        const title = document.createElement('h3');
                         title.textContent = item.title;
+                        itemDiv.appendChild(title);
+
                         const youtubeLink = document.createElement('a');
                         youtubeLink.href = item.youtube_url;
                         youtubeLink.textContent = "Watch on YouTube";
                         youtubeLink.target = "_blank";
+                        itemDiv.appendChild(youtubeLink);
+
                         const chunkText = document.createElement('p');
                         chunkText.textContent = item.chunk_text;
+                        itemDiv.appendChild(chunkText);
+
                         const relevance = document.createElement('p');
                         relevance.textContent = "Relevance Score: " + item.relevance.toFixed(4);
-                        itemDiv.appendChild(title);
-                        itemDiv.appendChild(youtubeLink);
-                        itemDiv.appendChild(chunkText);
                         itemDiv.appendChild(relevance);
-                        resultsDiv.appendChild(itemDiv);
+
+                        transcriptResultsDiv.appendChild(itemDiv);
                     });
                 } else {
-                    resultsDiv.innerHTML = '<p>No results found.</p>';
+                    transcriptResultsDiv.innerHTML += '<p>No transcript results found.</p>';
+                }
+
+                // Display wiki results
+                if (data.wikiResults && data.wikiResults.length > 0) {
+                    data.wikiResults.forEach(item => {
+                        const itemDiv = document.createElement('div');
+                        itemDiv.classList.add('result-item');
+
+                        const title = document.createElement('h3');
+                        title.textContent = item.title;
+                        itemDiv.appendChild(title);
+
+                        if (item.wiki_url) {
+                            const wikiLink = document.createElement('a');
+                            wikiLink.href = item.wiki_url;
+                            wikiLink.textContent = "Read on Wikipedia";
+                            wikiLink.target = "_blank";
+                            itemDiv.appendChild(wikiLink);
+                        }
+
+                        const chunkText = document.createElement('p');
+                        chunkText.textContent = item.chunk_text;
+                        itemDiv.appendChild(chunkText);
+
+                        const relevance = document.createElement('p');
+                        relevance.textContent = "Relevance Score: " + item.relevance.toFixed(4);
+                        itemDiv.appendChild(relevance);
+
+                        wikiResultsDiv.appendChild(itemDiv);
+                    });
+                } else {
+                    wikiResultsDiv.innerHTML += '<p>No wiki page results found.</p>';
                 }
             } catch (err) {
                 errorDiv.textContent = 'Error: ' + err.message;

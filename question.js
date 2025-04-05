@@ -67,7 +67,7 @@ app.get('/api/query', async (req, res) => {
         }
 
         console.log('Querying database for relevant transcript chunks using cosine similarity...');
-        const results = await db.any(
+        const transcriptResults = await db.any(
             `SELECT
                tc.chunk_text,
                tc.line_number,
@@ -83,17 +83,36 @@ app.get('/api/query', async (req, res) => {
              WHERE ce.embedding_model = $2
                AND tc.chunking_method = $3
              ORDER BY ce.embedding_vector <=> $1::vector ASC
-             LIMIT 5`,
+             LIMIT 20`,
             [questionEmbedding, OPENAI_MODEL, chunkingMethod]
         );
 
-        if (results.length === 0) {
-            console.error('No relevant transcript chunks found.');
-            return res.status(404).json({ error: 'No relevant transcript chunks found.' });
+        console.log('Querying database for relevant wiki page chunks using cosine similarity...');
+        const wikiResults = await db.any(
+            `SELECT
+               wpc.chunk_text,
+               wpc.chunk_index,
+               wp.title,
+               wp.page_id,
+               1 - (wpe.embedding_vector <=> $1::vector) AS relevance,
+               wp.timestamp
+             FROM wiki_page_chunk_embedding wpe
+             JOIN wiki_page_chunk wpc ON wpc.id = wpe.wiki_page_chunk_id
+             JOIN wiki_page wp ON wp.id = wpc.wiki_page_id
+             WHERE wpe.embedding_model = $2
+               AND wpc.chunking_method = $3
+             ORDER BY wpe.embedding_vector <=> $1::vector ASC
+             LIMIT 20`,
+            [questionEmbedding, OPENAI_MODEL, chunkingMethod]
+        );
+
+        if (transcriptResults.length === 0 && wikiResults.length === 0) {
+            console.error('No relevant transcript or wiki page chunks found.');
+            return res.status(404).json({ error: 'No relevant transcript or wiki page chunks found.' });
         }
 
-        // Optionally, adjust the YouTube URL with a start time if available.
-        const enhancedResults = results.map(row => {
+        // Enhance transcript results with youtube link adjustments.
+        const enhancedTranscriptResults = transcriptResults.map(row => {
             const start = row.video_timestamp;
             const youtubeUrlWithTime = start
                 ? `https://www.youtube.com/watch?v=${row.video_id}&t=${Math.floor(start)}`
@@ -105,7 +124,17 @@ app.get('/api/query', async (req, res) => {
             };
         });
 
-        return res.json({ results: enhancedResults });
+        // Enhance wiki results with a link to the Wikipedia page using the page_id.
+        const enhancedWikiResults = wikiResults.map(row => {
+            const wikiUrl = row.page_id ? `https://en.wikipedia.org/?curid=${row.page_id}` : null;
+            return {
+                ...row,
+                wiki_url: wikiUrl,
+                relevance: row.relevance,
+            };
+        });
+
+        return res.json({ transcriptResults: enhancedTranscriptResults, wikiResults: enhancedWikiResults });
     } catch (error) {
         console.error('Error during query execution:', error);
         return res.status(500).json({ error: 'Internal server error' });
