@@ -73,6 +73,23 @@ CREATE TABLE IF NOT EXISTS query_embedding (
 );
 `;
 
+// New table for wiki pages
+const wiki_page = `
+CREATE TABLE IF NOT EXISTS wiki_page (
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  namespace INTEGER,
+  page_id INTEGER UNIQUE,
+  revision_id INTEGER,
+  parent_revision_id INTEGER,
+  timestamp TIMESTAMPTZ,
+  contributor_username VARCHAR(255),
+  contributor_id INTEGER,
+  comment TEXT,
+  content TEXT
+);
+`;
+
 // Function to create initial tables
 const createTables = async () => {
   try {
@@ -93,6 +110,9 @@ const createTables = async () => {
 
     await db.none(query_embedding);
     console.log('Created table if not exists: query_embedding');
+
+    await db.none(wiki_page);
+    console.log('Created table if not exists: wiki_page');
   } catch (err) {
     console.error('Error creating tables:', err);
     throw err;
