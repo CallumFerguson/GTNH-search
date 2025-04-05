@@ -75,9 +75,9 @@ async function main() {
                 }
             }
 
-            const SEGMENT_SIZE = 250; // Number of transcript lines per chunk
-            const OVERLAP = 50;       // Overlap lines between chunks
-            const STEP = SEGMENT_SIZE - OVERLAP; // How many lines to move for next chunk
+            const SEGMENT_SIZE = 250;
+            const OVERLAP = 50;
+            const STEP = SEGMENT_SIZE - OVERLAP;
 
             const chunks = [];
             for (let i = 0; i < transcriptWordsWithTimeStamps.length; i += STEP) {
