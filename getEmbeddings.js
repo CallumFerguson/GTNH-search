@@ -6,17 +6,12 @@ dotenv.config();
 
 const allowFetch = true;
 const OPENAI_MODEL = 'text-embedding-3-small';
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 100;  // Updated to 100 embeddings per API request.
 
 const pgp = pgPromise();
 const db = pgp(process.env.DATABASE_URL);
 
-// Initialize the OpenAI client using the official package.
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
-
-// Helper function to split array into batches.
+// Helper function to split an array into batches.
 function chunkArray(array, size) {
     const result = [];
     for (let i = 0; i < array.length; i += size) {
@@ -25,35 +20,48 @@ function chunkArray(array, size) {
     return result;
 }
 
-async function processChunk(chunk) {
-    console.log(`Generating embedding for chunk id ${chunk.id}`);
+async function processBatch(batch) {
+    console.log(`Generating embeddings for batch with chunk ids: [${batch.map(chunk => chunk.id).join(', ')}]`);
+
+    // For each chunk, combine the video title with the transcript chunk text.
+    const inputs = batch.map(chunk => `${chunk.title}: ${chunk.chunk_text}`);
+
+    // Make a single API request for the entire batch.
     const response = await openai.embeddings.create({
         model: OPENAI_MODEL,
-        input: chunk.chunk_text,
+        input: inputs,
     });
-    if (
-        !response.data ||
-        !response.data[0] ||
-        !response.data[0].embedding
-    ) {
-        throw new Error(`Embedding generation failed for chunk id ${chunk.id}`);
-    }
-    console.log(`Generated embedding for chunk id ${chunk.id}`);
 
-    // Immediately insert the embedding into the database.
-    await db.none(
-        'INSERT INTO chunk_embedding (chunk_id, embedding_source, embedding_model, embedding_vector) VALUES ($1, $2, $3, $4::vector)',
-        [chunk.id, 'openai', OPENAI_MODEL, response.data[0].embedding]
-    );
-    console.log(`Inserted embedding for chunk id ${chunk.id} into the database.`);
+    // Verify that the response contains the expected number of embeddings.
+    if (!response.data || response.data.length !== batch.length) {
+        throw new Error(`Embedding generation failed: expected ${batch.length} embeddings but received ${response.data ? response.data.length : 0}`);
+    }
+
+    console.log(`Generated embeddings for batch with chunk ids: [${batch.map(chunk => chunk.id).join(', ')}]`);
+
+    // Insert each embedding into the database sequentially.
+    for (let i = 0; i < batch.length; i++) {
+        const chunk = batch[i];
+        const embedding = response.data[i].embedding;
+        if (!embedding) {
+            throw new Error(`No embedding returned for chunk id ${chunk.id}`);
+        }
+        await db.none(
+            'INSERT INTO chunk_embedding (chunk_id, embedding_source, embedding_model, embedding_vector) VALUES ($1, $2, $3, $4::vector)',
+            [chunk.id, 'openai', OPENAI_MODEL, embedding]
+        );
+        console.log(`Inserted embedding for chunk id ${chunk.id} into the database.`);
+    }
 }
 
 async function main() {
     try {
-        // 1. Retrieve all transcript chunks that are missing an embedding for the given model.
+        // Retrieve transcript chunks missing embeddings and include the video title.
         const chunks = await db.any(
-            `SELECT tc.id, tc.chunk_text
+            `SELECT tc.id, tc.chunk_text, v.title
              FROM transcript_chunk tc
+             JOIN transcript t ON t.id = tc.transcript_id
+             JOIN video v ON v.id = t.video_id
              WHERE NOT EXISTS (
                 SELECT 1 FROM chunk_embedding ce
                 WHERE ce.chunk_id = tc.id AND ce.embedding_model = $1
@@ -73,13 +81,12 @@ async function main() {
             process.exit(1);
         }
 
-        // 2. Process the chunks in batches.
+        // Process the chunks in batches sequentially.
         const batches = chunkArray(chunks, BATCH_SIZE);
-        for (const [batchIndex, batch] of batches.entries()) {
+        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+            const batch = batches[batchIndex];
             console.log(`Processing batch ${batchIndex + 1} of ${batches.length} with ${batch.length} chunks...`);
-            await Promise.all(
-                batch.map(chunk => processChunk(chunk))
-            );
+            await processBatch(batch);
         }
 
         console.log('All missing embeddings have been generated and inserted into the database.');
@@ -90,5 +97,9 @@ async function main() {
         pgp.end();
     }
 }
+
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+});
 
 main();
