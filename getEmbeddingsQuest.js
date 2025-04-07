@@ -31,8 +31,8 @@ function chunkArray(array, size) {
  * A single API call generates embeddings for all texts in the batch.
  */
 async function processBatch(batch) {
-    // Collect all the texts for the current batch.
-    const texts = batch.map(chunk => chunk.chunk_text);
+    // Combine quest title and chunk text so that each input includes the quest title.
+    const texts = batch.map(chunk => `${chunk.quest_title}: ${chunk.chunk_text}`);
 
     // Generate embeddings for the batch in one request.
     const response = await openai.embeddings.create({
@@ -63,13 +63,15 @@ async function processBatch(batch) {
 async function main() {
     try {
         // Retrieve all quest chunks missing an embedding for the given model.
+        // Note the join with the quest table to also retrieve the quest title.
         const chunks = await db.any(
-            `SELECT qc.id, qc.chunk_text
-         FROM quest_chunk qc
-         WHERE NOT EXISTS (
-           SELECT 1 FROM quest_chunk_embedding qce
-           WHERE qce.quest_chunk_id = qc.id AND qce.embedding_model = $1
-         )`,
+            `SELECT qc.id, qc.chunk_text, q.title AS quest_title
+             FROM quest_chunk qc
+             JOIN quest q ON qc.quest_id = q.id
+             WHERE NOT EXISTS (
+               SELECT 1 FROM quest_chunk_embedding qce
+               WHERE qce.quest_chunk_id = qc.id AND qce.embedding_model = $1
+             )`,
             [OPENAI_MODEL]
         );
 
