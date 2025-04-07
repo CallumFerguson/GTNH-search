@@ -61,7 +61,6 @@ CREATE TABLE IF NOT EXISTS chunk_embedding (
 );
 `;
 
-// New table for caching query embeddings
 const query_embedding = `
 CREATE TABLE IF NOT EXISTS query_embedding (
   id SERIAL PRIMARY KEY,
@@ -73,7 +72,6 @@ CREATE TABLE IF NOT EXISTS query_embedding (
 );
 `;
 
-// New table for wiki pages
 const wiki_page = `
 CREATE TABLE IF NOT EXISTS wiki_page (
   id SERIAL PRIMARY KEY,
@@ -90,7 +88,6 @@ CREATE TABLE IF NOT EXISTS wiki_page (
 );
 `;
 
-// New table for wiki page chunks
 const wiki_page_chunk = `
 CREATE TABLE IF NOT EXISTS wiki_page_chunk (
   id SERIAL PRIMARY KEY,
@@ -101,11 +98,41 @@ CREATE TABLE IF NOT EXISTS wiki_page_chunk (
 );
 `;
 
-// New table for wiki page chunk embeddings
 const wiki_page_chunk_embedding = `
 CREATE TABLE IF NOT EXISTS wiki_page_chunk_embedding (
   id SERIAL PRIMARY KEY,
   wiki_page_chunk_id INTEGER NOT NULL REFERENCES wiki_page_chunk(id),
+  embedding_source VARCHAR(255),
+  embedding_model VARCHAR(255),
+  embedding_vector vector(1536)
+);
+`;
+
+// New table for quests
+const quest = `
+CREATE TABLE IF NOT EXISTS quest (
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(255) UNIQUE NOT NULL,
+  description TEXT
+);
+`;
+
+// New table for quest chunks
+const quest_chunk = `
+CREATE TABLE IF NOT EXISTS quest_chunk (
+  id SERIAL PRIMARY KEY,
+  quest_id INTEGER NOT NULL REFERENCES quest(id),
+  chunk_text TEXT,
+  chunk_index INTEGER NOT NULL DEFAULT 0,
+  chunking_method VARCHAR(255)
+);
+`;
+
+// New table for quest chunk embeddings
+const quest_chunk_embedding = `
+CREATE TABLE IF NOT EXISTS quest_chunk_embedding (
+  id SERIAL PRIMARY KEY,
+  quest_chunk_id INTEGER NOT NULL REFERENCES quest_chunk(id),
   embedding_source VARCHAR(255),
   embedding_model VARCHAR(255),
   embedding_vector vector(1536)
@@ -141,6 +168,16 @@ const createTables = async () => {
 
     await db.none(wiki_page_chunk_embedding);
     console.log('Created table if not exists: wiki_page_chunk_embedding');
+
+    // Create the quest table and its related chunk and embedding tables
+    await db.none(quest);
+    console.log('Created table if not exists: quest');
+
+    await db.none(quest_chunk);
+    console.log('Created table if not exists: quest_chunk');
+
+    await db.none(quest_chunk_embedding);
+    console.log('Created table if not exists: quest_chunk_embedding');
   } catch (err) {
     console.error('Error creating tables:', err);
     throw err;
