@@ -60,8 +60,8 @@ app.get('/api/query', async (req, res) => {
             // Insert the new query embedding into the cache table.
             await db.none(
                 `INSERT INTO query_embedding (query_text, embedding_source, embedding_model, embedding_vector)
-                 VALUES ($1, $2, $3, $4)
-                 ON CONFLICT (query_text) DO NOTHING`,
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (query_text) DO NOTHING`,
                 [question, 'openai', OPENAI_MODEL, questionEmbedding]
             );
         }
@@ -69,46 +69,64 @@ app.get('/api/query', async (req, res) => {
         console.log('Querying database for relevant transcript chunks using cosine similarity...');
         const transcriptResults = await db.any(
             `SELECT
-               tc.chunk_text,
-               tc.line_number,
-               tc.video_timestamp,
-               video.video_id,
-               video.title,
-               ('https://youtube.com/watch?v=' || video.video_id) AS youtube_url,
-               1 - (ce.embedding_vector <=> $1::vector) AS relevance
-             FROM chunk_embedding ce
-             JOIN transcript_chunk tc ON tc.id = ce.chunk_id
-             JOIN transcript t ON t.id = tc.transcript_id
-             JOIN video ON video.id = t.video_id
-             WHERE ce.embedding_model = $2
-               AND tc.chunking_method = $3
-             ORDER BY ce.embedding_vector <=> $1::vector ASC
-             LIMIT 20`,
+         tc.chunk_text,
+         tc.line_number,
+         tc.video_timestamp,
+         video.video_id,
+         video.title,
+         ('https://youtube.com/watch?v=' || video.video_id) AS youtube_url,
+         1 - (ce.embedding_vector <=> $1::vector) AS relevance
+       FROM chunk_embedding ce
+       JOIN transcript_chunk tc ON tc.id = ce.chunk_id
+       JOIN transcript t ON t.id = tc.transcript_id
+       JOIN video ON video.id = t.video_id
+       WHERE ce.embedding_model = $2
+         AND tc.chunking_method = $3
+       ORDER BY ce.embedding_vector <=> $1::vector ASC
+       LIMIT 20`,
             [questionEmbedding, OPENAI_MODEL, chunkingMethod]
         );
 
         console.log('Querying database for relevant wiki page chunks using cosine similarity...');
         const wikiResults = await db.any(
             `SELECT
-               wpc.chunk_text,
-               wpc.chunk_index,
-               wp.title,
-               wp.page_id,
-               1 - (wpe.embedding_vector <=> $1::vector) AS relevance,
-               wp.timestamp
-             FROM wiki_page_chunk_embedding wpe
-             JOIN wiki_page_chunk wpc ON wpc.id = wpe.wiki_page_chunk_id
-             JOIN wiki_page wp ON wp.id = wpc.wiki_page_id
-             WHERE wpe.embedding_model = $2
-               AND wpc.chunking_method = $3
-             ORDER BY wpe.embedding_vector <=> $1::vector ASC
-             LIMIT 20`,
+         wpc.chunk_text,
+         wpc.chunk_index,
+         wp.title,
+         wp.page_id,
+         1 - (wpe.embedding_vector <=> $1::vector) AS relevance,
+         wp.timestamp
+       FROM wiki_page_chunk_embedding wpe
+       JOIN wiki_page_chunk wpc ON wpc.id = wpe.wiki_page_chunk_id
+       JOIN wiki_page wp ON wp.id = wpc.wiki_page_id
+       WHERE wpe.embedding_model = $2
+         AND wpc.chunking_method = $3
+       ORDER BY wpe.embedding_vector <=> $1::vector ASC
+       LIMIT 20`,
             [questionEmbedding, OPENAI_MODEL, chunkingMethod]
         );
 
-        if (transcriptResults.length === 0 && wikiResults.length === 0) {
-            console.error('No relevant transcript or wiki page chunks found.');
-            return res.status(404).json({ error: 'No relevant transcript or wiki page chunks found.' });
+        console.log('Querying database for relevant quest chunks using cosine similarity...');
+        const questResults = await db.any(
+            `SELECT
+         qc.chunk_text,
+         qc.chunk_index,
+         q.title,
+         q.description,
+         1 - (qce.embedding_vector <=> $1::vector) AS relevance
+       FROM quest_chunk_embedding qce
+       JOIN quest_chunk qc ON qc.id = qce.quest_chunk_id
+       JOIN quest q ON q.id = qc.quest_id
+       WHERE qce.embedding_model = $2
+         AND qc.chunking_method = $3
+       ORDER BY qce.embedding_vector <=> $1::vector ASC
+       LIMIT 20`,
+            [questionEmbedding, OPENAI_MODEL, chunkingMethod]
+        );
+
+        if (transcriptResults.length === 0 && wikiResults.length === 0 && questResults.length === 0) {
+            console.error('No relevant transcript, wiki page, or quest chunks found.');
+            return res.status(404).json({ error: 'No relevant transcript, wiki page, or quest chunks found.' });
         }
 
         // Enhance transcript results with youtube link adjustments.
@@ -134,7 +152,17 @@ app.get('/api/query', async (req, res) => {
             };
         });
 
-        return res.json({ transcriptResults: enhancedTranscriptResults, wikiResults: enhancedWikiResults });
+        // For quest results, you can simply pass them along (or add any custom formatting here).
+        const enhancedQuestResults = questResults.map(row => ({
+            ...row,
+            relevance: row.relevance,
+        }));
+
+        return res.json({
+            transcriptResults: enhancedTranscriptResults,
+            wikiResults: enhancedWikiResults,
+            questResults: enhancedQuestResults
+        });
     } catch (error) {
         console.error('Error during query execution:', error);
         return res.status(500).json({ error: 'Internal server error' });

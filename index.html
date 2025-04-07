@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Transcript and Wiki Query</title>
+    <title>Transcript, Wiki & Quest Query</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -95,7 +95,7 @@
 
 <body>
     <div class="container">
-        <h1>Transcript and Wiki Query</h1>
+        <h1>Transcript, Wiki & Quest Query</h1>
         <input type="text" id="questionInput" placeholder="Enter your question" />
         <button id="queryButton">Search</button>
         <div id="error" class="error"></div>
@@ -106,6 +106,9 @@
             <div id="wikiResults" class="results-column">
                 <h2>Wiki Page Results</h2>
             </div>
+            <div id="questResults" class="results-column">
+                <h2>Quest Results</h2>
+            </div>
         </div>
     </div>
     <script>
@@ -113,10 +116,12 @@
             const question = document.getElementById('questionInput').value.trim();
             const transcriptResultsDiv = document.getElementById('transcriptResults');
             const wikiResultsDiv = document.getElementById('wikiResults');
+            const questResultsDiv = document.getElementById('questResults');
             const errorDiv = document.getElementById('error');
 
             transcriptResultsDiv.innerHTML = '<h2>Transcript Results</h2>';
             wikiResultsDiv.innerHTML = '<h2>Wiki Page Results</h2>';
+            questResultsDiv.innerHTML = '<h2>Quest Results</h2>';
             errorDiv.textContent = '';
 
             if (!question) {
@@ -191,6 +196,36 @@
                     });
                 } else {
                     wikiResultsDiv.innerHTML += '<p>No wiki page results found.</p>';
+                }
+
+                // Display quest results
+                if (data.questResults && data.questResults.length > 0) {
+                    data.questResults.forEach(item => {
+                        const itemDiv = document.createElement('div');
+                        itemDiv.classList.add('result-item');
+
+                        const title = document.createElement('h3');
+                        title.textContent = item.title;
+                        itemDiv.appendChild(title);
+
+                        if (item.description) {
+                            const description = document.createElement('p');
+                            description.textContent = item.description;
+                            itemDiv.appendChild(description);
+                        }
+
+                        const chunkText = document.createElement('p');
+                        chunkText.textContent = item.chunk_text;
+                        itemDiv.appendChild(chunkText);
+
+                        const relevance = document.createElement('p');
+                        relevance.textContent = "Relevance Score: " + item.relevance.toFixed(4);
+                        itemDiv.appendChild(relevance);
+
+                        questResultsDiv.appendChild(itemDiv);
+                    });
+                } else {
+                    questResultsDiv.innerHTML += '<p>No quest results found.</p>';
                 }
             } catch (err) {
                 errorDiv.textContent = 'Error: ' + err.message;
