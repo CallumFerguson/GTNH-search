@@ -51,16 +51,29 @@ function validateResponse(data) {
 async function main() {
     // Retrieve all videos that are related to GTNH, are not live streams, lack a transcript,
     // and either have subtitles enabled (true) or unspecified (null).
+    //     let videos = await db.any(`
+    //         SELECT v.id, v.video_id
+    //         FROM video v
+    //         LEFT JOIN transcript t ON v.id = t.video_id
+    //         WHERE v.related_to_GTNH = true 
+    //             AND v.live_stream = false 
+    //             AND t.id IS NULL
+    //             AND (v.has_subtitles = true OR v.has_subtitles IS NULL)
+    //         ORDER BY v.published_at DESC
+    // `);
+
     let videos = await db.any(`
-        SELECT v.id, v.video_id
-        FROM video v
-        LEFT JOIN transcript t ON v.id = t.video_id
-        WHERE v.related_to_GTNH = true 
-            AND v.live_stream = false 
-            AND t.id IS NULL
-            AND (v.has_subtitles = true OR v.has_subtitles IS NULL)
-        ORDER BY v.published_at DESC
+    SELECT v.id, v.video_id
+    FROM video v
+    LEFT JOIN transcript t ON v.id = t.video_id
+    WHERE v.related_to_GTNH = true 
+        AND v.live_stream = false 
+        AND t.id IS NULL
+        AND (v.has_subtitles = true OR v.has_subtitles IS NULL)
+        AND v.published_at > '2021-05-04'
+    ORDER BY v.published_at DESC
 `);
+
 
 
     // const channelName = 'AverageGregTechPlayer';
@@ -83,7 +96,7 @@ async function main() {
 
     console.log(`Found ${videos.length} videos that require transcripts to be fetched.`);
 
-    const batchSize = 93;
+    const batchSize = 100;
     videos = videos.slice(0, batchSize);
     console.log(`getting the transcripts for the first ${batchSize} videos`);
 
