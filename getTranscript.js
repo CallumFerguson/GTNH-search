@@ -7,18 +7,28 @@ const db = pgp(process.env.DATABASE_URL);
 const allowFetch = true;
 
 async function getTranscript(videoId) {
-    try {
-        const response = await fetch(`http://localhost:5000/transcript?video_id=${videoId}`);
-        if (!response.ok) {
-            throw new Error(`Error: ${response.status} ${response.statusText}`);
+    const maxRetries = 3;
+    let attempt = 0;
+
+    while (attempt < maxRetries) {
+        try {
+            const response = await fetch(`http://localhost:5000/transcript?video_id=${videoId}`);
+            if (!response.ok) {
+                throw new Error(`Error: ${response.status} ${response.statusText}`);
+            }
+            const responseJSON = await response.json();
+            return responseJSON;
+        } catch (error) {
+            attempt++;
+            console.error(`Attempt ${attempt} failed:`, error.message);
+            if (attempt === maxRetries) {
+                console.error('Failed after 3 attempts, exiting.');
+                process.exit(1);
+            }
         }
-        const responseJSON = await response.json();
-        return responseJSON;
-    } catch (error) {
-        console.error('Failed to fetch transcript:', error.message);
-        process.exit(1);
     }
 }
+
 
 function validateResponse(data) {
     if (!("snippets" in data)) {
