@@ -105,10 +105,11 @@ async function main() {
     }
 
     console.log(`Found ${videos.length} videos that require transcripts to be fetched.`);
+    process.exit(1);
 
-    const batchSize = 100;
-    videos = videos.slice(0, batchSize);
-    console.log(`getting the transcripts for the first ${batchSize} videos`);
+    // const batchSize = 100;
+    // videos = videos.slice(0, batchSize);
+    // console.log(`getting the transcripts for the first ${batchSize} videos`);
 
     for (const videoRecord of videos) {
         if (!allowFetch) {
